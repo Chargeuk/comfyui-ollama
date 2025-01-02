@@ -198,7 +198,30 @@ class OllamaVts:
         "STRING",
         "STRING",
         "STRING",
+        "STRING",
+        "STRING",
+        "STRING",
+        "STRING",
         "STRING"
+    )
+    OUTPUT_IS_LIST = (
+        True,
+        True,
+        True,
+        True,
+        True,
+        False,
+        False,
+        True,
+        True,
+        False,
+        False,
+        False,
+        False,
+        True,
+        True,
+        True,
+        True
     )
 
     RETURN_NAMES = (
@@ -215,7 +238,12 @@ class OllamaVts:
         "character_neg_ethnicity_tags_text",
         "environment_positive_text",
         "environment_negative_text",
+        "character_positive_face_texts",
+        "character_negative_face_texts",
+        "character_positive_texts",
+        "character_negative_texts"
     )
+
     FUNCTION = "ollama_vision"
     CATEGORY = "Ollama"
 
@@ -462,6 +490,12 @@ request query params:
 
         environment_positive_text = base_positive + OllamaVts.to_text(environment_comma_text_results)
         environment_negative_text = base_negative
+
+        character_positive_face_texts = []
+        character_negative_face_texts = []
+        character_positive_texts = []
+        character_negative_texts = []
+
         return (
                 character_face_text_results,
                 character_body_text_results,
@@ -476,6 +510,10 @@ request query params:
                 character_ethnicity_tags_text_neg_results,
                 environment_positive_text,
                 environment_negative_text,
+                character_positive_face_texts,
+                character_negative_face_texts,
+                character_positive_texts,
+                character_negative_texts
             )
 
 
