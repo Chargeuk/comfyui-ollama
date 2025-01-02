@@ -1,4 +1,6 @@
 import random
+from typing import Tuple, Union, List
+import json
 
 from ollama import Client
 import numpy as np
@@ -116,6 +118,9 @@ class OllamaVts:
         seed = random.randint(1, 2 ** 31)
         return {
             "required": {
+                "base_positive": ("STRING", {"default": "(photorealistic:1.2) (photo:1.2)", "multiline": True}),
+                "base_positive_face": ("STRING", {"default": "a beautiful face with lots of detail and striking eyes", "multiline": True}),
+                "base_negative": ("STRING", {"default": "cartoon, cgi, render, illustration, painting, drawing, cartoon, (worst quality, low quality, normal quality:2), out of focus", "multiline": True}),
                 "split_text": ("STRING", {"default": "-----", "multiline": False}),
                 "character_face_text": ("STRING", {"default": "", "multiline": True}),
                 "character_body_text": ("STRING", {"default": "", "multiline": True}),
@@ -126,11 +131,8 @@ class OllamaVts:
                 "character_ethnicity_tags_text": ("STRING", {"default": "", "multiline": True}),
                 "environment_text": ("STRING", {"default": "", "multiline": True}),
                 "environment_comma_text": ("STRING", {"default": "", "multiline": True}),
-                "images": ("IMAGE",),
-                # "query": ("STRING", {
-                #     "multiline": True,
-                #     "default": "describe the image"
-                # }),
+                "environment_images": ("IMAGE",),
+                "character_images": ("IMAGE",),
                 "debug": (["enable", "disable"],),
                 "url": ("STRING", {
                     "multiline": False,
@@ -168,10 +170,24 @@ class OllamaVts:
                         "default": 2048,
                     },
                 ),
+                "body_tags_multiply": (
+                    "FLOAT",
+                    {
+                        "default": 1.00,
+                    },
+                ),
+                "ethnicity_tags_multiply": (
+                    "FLOAT",
+                    {
+                        "default": 1.00,
+                    },
+                ),
             },
         }
 
     RETURN_TYPES = (
+        "STRING",
+        "STRING",
         "STRING",
         "STRING",
         "STRING",
@@ -197,11 +213,14 @@ class OllamaVts:
         "environment_comma_text",
         "character_neg_body_tags_text",
         "character_neg_ethnicity_tags_text",
+        "environment_positive_text",
+        "environment_negative_text",
     )
     FUNCTION = "ollama_vision"
     CATEGORY = "Ollama"
 
-    def calculate_results(self, client, model, query, split_text, images, keep_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens):
+    @staticmethod
+    def calculate_results(client, model, query: str, split_text: str, images, keep_alive: int, format: str, seed: int, top_p: float, top_k: int, temperature: float, repetition_penalty: float, max_new_tokens: int) -> List[str]:
         # if text is empty, or whitespace, return empty string
         if not query or not query.strip():
             return ""
@@ -239,8 +258,9 @@ class OllamaVts:
 """)
             finalResults.append(result['response'])
         return finalResults
-
-    def filter_values(self, input_string):
+    
+    @staticmethod
+    def filter_values(input_string: Union[str, List[str]], multiply: float) -> Tuple[str, str]:
         try:
             # Check if the input is a list of strings
             if isinstance(input_string, list):
@@ -278,12 +298,14 @@ class OllamaVts:
                     # Increase the numerical value
                     value *= 1.25
 
-                # Round the value to 2 decimal places
-                value = round(value, 2)
-
                 # Check if the value is above 1.5
                 if value > 1.5:
                     value = 1.5
+
+                value *= multiply
+
+                # Round the value to 2 decimal places
+                value = round(value, 2)
                 
                 # Check if the numerical value is greater than zero
                 if value > 0:
@@ -301,36 +323,9 @@ class OllamaVts:
             # Return the original input and an empty string in case of an error
             return input_string, ""
 
-
-    def ollama_vision(
-        self,
-        split_text,
-        character_face_text,
-        character_body_text,
-        character_muscle_text,
-        character_face_comma_text,
-        character_comma_text,
-        character_body_tags_text,
-        character_ethnicity_tags_text,
-        environment_text,
-        environment_comma_text,
-        images,
-        debug,
-        url,
-        model,
-        seed,
-        keep_alive,
-        format,
-        top_p,
-        top_k,
-        temperature,
-        repetition_penalty,
-        max_new_tokens
-    ):
+    @staticmethod
+    def get_binary_images(images) -> List[bytes]:
         images_binary = []
-
-        if format == "text":
-            format = ''
 
         for (batch_number, image) in enumerate(images):
             # Convert tensor to numpy array
@@ -346,6 +341,75 @@ class OllamaVts:
             # Get binary data
             img_binary = buffered.getvalue()
             images_binary.append(img_binary)
+        return images_binary
+    
+    @staticmethod
+    def to_text(input_data, delimiter: str = "\n") -> str:
+        # Replace all occurrences of "\n" (literal newline) in the delimiter with an actual newline character.
+        delimiter = delimiter.replace("\\n", "\n")
+
+        # Try to convert input_data to a list or dict if it's a string
+        if isinstance(input_data, str):
+            try:
+                input_data = json.loads(input_data)
+                print("input_data successfully converted from string to list or dict")
+            except json.JSONDecodeError:
+                print("input_data is a string but not a valid JSON, proceeding as a single string value")
+
+        if isinstance(input_data, list):
+            print("input_data is a list")
+            # Convert each element to a string and join them with the delimiter
+            merged_text = delimiter.join(str(item) for item in input_data)
+        elif isinstance(input_data, dict):
+            print("input_data is a dict")
+            # Convert each value to a string and join them with the delimiter
+            merged_text = delimiter.join(str(value) for value in input_data.values())
+        else:
+            # Convert the single value to a string
+            print(f"input_data is a single value of type {type(input_data).__name__}")
+            merged_text = str(input_data)
+
+        # trim the merged text
+        merged_text = merged_text.strip()
+
+        return merged_text
+
+    def ollama_vision(
+        self,
+        base_positive: str,
+        base_positive_face: str,
+        base_negative: str,
+        split_text: str,
+        character_face_text: str,
+        character_body_text: str,
+        character_muscle_text: str,
+        character_face_comma_text: str,
+        character_comma_text: str,
+        character_body_tags_text: str,
+        character_ethnicity_tags_text: str,
+        environment_text: str,
+        environment_comma_text: str,
+        environment_images,
+        character_images,
+        debug: str,                       # Assuming it's either "enable" or "disable"
+        url: str,
+        model: str,                       # Assuming it's a string
+        seed: int,
+        keep_alive: int,
+        format: str,                      # Assuming it's either "text", "json", or an empty string
+        top_p: float,
+        top_k: int,
+        temperature: float,
+        repetition_penalty: float,
+        max_new_tokens: int,
+        body_tags_multiply: float,
+        ethnicity_tags_multiply: float,
+    ):
+        if format == "text":
+            format = ''
+
+        environment_images_binary = OllamaVts.get_binary_images(environment_images)
+        character_images_binary = OllamaVts.get_binary_images(character_images)
 
         client = Client(host=url)
         if debug == "enable":
@@ -358,38 +422,46 @@ request query params:
 """)
         mid_question_alive = 5
         # response = client.generate(model=model, prompt=query, images=images_binary, keep_alive=str(keep_alive) + "m", format=format)
-        character_face_text_results = self.calculate_results(client, model, character_face_text, split_text, images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        character_body_text_results = self.calculate_results(client, model, character_body_text, split_text, images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        character_muscle_text_results = self.calculate_results(client, model, character_muscle_text, split_text, images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+        character_face_text_results = OllamaVts.calculate_results(client, model, character_face_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+        character_body_text_results = OllamaVts.calculate_results(client, model, character_body_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+        character_muscle_text_results = OllamaVts.calculate_results(client, model, character_muscle_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
         # character_text_results is the character_body_text_results array concatenated to the character_face_text_results array
         character_text_results = character_face_text_results + character_body_text_results
         character_body_muscle_results = character_body_text_results + character_muscle_text_results
         character_text_muscle_results = character_face_text_results + character_body_text_results + character_muscle_text_results
         # character_text is the character_text_results array concatenated to a single string with a newline character as the separator and enclosed in ``` characters
-        character_text = "```\n" + "\n".join(character_text_results) + "\n```"
-        character_full_text = "```\n" + "\n".join(character_text_muscle_results) + "\n```"
-        character_face_text = "```\n" + "\n".join(character_face_text_results) + "\n```"
-        character_body_text = "```\n" + "\n".join(character_body_text_results) + "\n```"
-        character_body_muscle_text = "```\n" + "\n".join(character_body_muscle_results) + "\n```"
+        character_text = "```\n" + OllamaVts.to_text(character_text_results) + "\n```"
+        character_full_text = "```\n" + OllamaVts.to_text(character_text_muscle_results) + "\n```"
+        character_face_text = "```\n" + OllamaVts.to_text(character_face_text_results) + "\n```"
+        character_body_text = "```\n" + OllamaVts.to_text(character_body_text_results) + "\n```"
+        character_body_muscle_text = "```\n" + OllamaVts.to_text(character_body_muscle_results) + "\n```"
 
         used_character_face_comma_text = character_comma_text + character_face_text
-        character_face_comma_text_results = self.calculate_results(client, model, used_character_face_comma_text, split_text, None, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+        character_face_comma_text_results = OllamaVts.calculate_results(client, model, used_character_face_comma_text, split_text, None, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
 
         used_character_comma_text = character_face_comma_text + character_text
-        character_comma_text_results = self.calculate_results(client, model, used_character_comma_text, split_text, None, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+        character_comma_text_results = OllamaVts.calculate_results(client, model, used_character_comma_text, split_text, None, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
 
         used_ethnicity_text = character_ethnicity_tags_text + character_text
-        character_ethnicity_tags_text_results, character_ethnicity_tags_text_neg_results = self.filter_values(self.calculate_results(client, model, used_ethnicity_text, split_text, images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens))
+        character_ethnicity_tags_text_results, character_ethnicity_tags_text_neg_results = OllamaVts.filter_values(
+            OllamaVts.calculate_results(client, model, used_ethnicity_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens),
+            ethnicity_tags_multiply
+        )
 
         used_body_tags_text = character_body_tags_text + character_body_muscle_text
-        character_body_tags_text_results, character_body_tags_text_neg_results = self.filter_values(self.calculate_results(client, model, used_body_tags_text, split_text, images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens))
+        character_body_tags_text_results, character_body_tags_text_neg_results = OllamaVts.filter_values(
+            OllamaVts.calculate_results(client, model, used_body_tags_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens),
+            body_tags_multiply
+        )
 
-        environment_text_results = self.calculate_results(client, model, environment_text, split_text, images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        environment_text = "```\n" + "\n".join(environment_text_results) + "\n```"
+        environment_text_results = OllamaVts.calculate_results(client, model, environment_text, split_text, environment_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+        environment_text = "```\n" + OllamaVts.to_text(environment_text_results) + "\n```"
 
         used_environment_comma_text = environment_comma_text + environment_text
-        environment_comma_text_results = self.calculate_results(client, model, used_environment_comma_text, split_text, None, keep_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+        environment_comma_text_results = OllamaVts.calculate_results(client, model, used_environment_comma_text, split_text, None, keep_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
 
+        environment_positive_text = base_positive + OllamaVts.to_text(environment_comma_text_results)
+        environment_negative_text = base_negative
         return (
                 character_face_text_results,
                 character_body_text_results,
@@ -401,7 +473,9 @@ request query params:
                 environment_text_results,
                 environment_comma_text_results,
                 character_body_tags_text_neg_results,
-                character_ethnicity_tags_text_neg_results
+                character_ethnicity_tags_text_neg_results,
+                environment_positive_text,
+                environment_negative_text,
             )
 
 
