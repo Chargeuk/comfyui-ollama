@@ -533,39 +533,6 @@ request query params:
 
 """)
         mid_question_alive = 5
-        # # response = client.generate(model=model, prompt=query, images=images_binary, keep_alive=str(keep_alive) + "m", format=format)
-        # character_face_text_results = OllamaVts.calculate_results(client, model, character_face_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        # character_body_text_results = OllamaVts.calculate_results(client, model, character_body_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        # character_muscle_text_results = OllamaVts.calculate_results(client, model, character_muscle_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        # # character_text_results is the character_body_text_results array concatenated to the character_face_text_results array
-        # character_text_results = character_face_text_results + character_body_text_results
-        # character_body_muscle_results = character_body_text_results + character_muscle_text_results
-        # character_text_muscle_results = character_face_text_results + character_body_text_results + character_muscle_text_results
-        # # character_text is the character_text_results array concatenated to a single string with a newline character as the separator and enclosed in ``` characters
-        # character_text = "```\n" + OllamaVts.to_text(character_text_results) + "\n```"
-        # character_full_text = "```\n" + OllamaVts.to_text(character_text_muscle_results) + "\n```"
-        # character_face_text = "```\n" + OllamaVts.to_text(character_face_text_results) + "\n```"
-        # character_body_text = "```\n" + OllamaVts.to_text(character_body_text_results) + "\n```"
-        # character_body_muscle_text = "```\n" + OllamaVts.to_text(character_body_muscle_results) + "\n```"
-
-        # used_character_face_comma_text = character_comma_text + character_face_text
-        # character_face_comma_text_results = OllamaVts.calculate_results(client, model, used_character_face_comma_text, split_text, None, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-
-        # used_character_comma_text = character_face_comma_text + character_text
-        # character_comma_text_results = OllamaVts.calculate_results(client, model, used_character_comma_text, split_text, None, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-
-        # used_ethnicity_text = character_ethnicity_tags_text + character_text
-        # character_ethnicity_tags_text_results, character_ethnicity_tags_text_neg_results = OllamaVts.filter_values(
-        #     OllamaVts.calculate_results(client, model, used_ethnicity_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens),
-        #     ethnicity_tags_multiply
-        # )
-
-        # used_body_tags_text = character_body_tags_text + character_body_muscle_text
-        # character_body_tags_text_results, character_body_tags_text_neg_results = OllamaVts.filter_values(
-        #     OllamaVts.calculate_results(client, model, used_body_tags_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens),
-        #     body_tags_multiply
-        # )
-
         character_positive_face_texts = []
         character_negative_face_texts = []
         character_positive_texts = []
@@ -627,9 +594,9 @@ request query params:
         used_environment_comma_text = environment_comma_text + environment_text
         environment_comma_text_results = OllamaVts.calculate_results(client, model, used_environment_comma_text, split_text, None, keep_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
 
-        environment_positive_text = base_positive + OllamaVts.to_text(environment_comma_text_results)
+        environment_positive_text = f"{base_positive}, {OllamaVts.to_text(environment_comma_text_results)}"
         environment_negative_text = base_negative
-        
+
         return (
                 character_face_text_results,
                 character_body_text_results,
