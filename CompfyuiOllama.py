@@ -252,6 +252,10 @@ class OllamaVts:
         # if text is empty, or whitespace, return empty string
         if not query or not query.strip():
             return ""
+
+        used_keep_alive = str(keep_alive) + "m"
+        if keep_alive == 0:
+            used_keep_alive = 0
         
         # split text by newline
         texts = query.split(split_text)
@@ -268,7 +272,7 @@ class OllamaVts:
                 model=model,
                 prompt=text,
                 images=images,
-                keep_alive=str(keep_alive) + "m",
+                keep_alive=used_keep_alive,
                 format=format,
                 options={
                     "seed": seed,
@@ -322,7 +326,7 @@ class OllamaVts:
                     value -= 0.2
                 
                 # Check if the key ends with "abs"
-                if key.strip().endswith("abs"):
+                if (key.strip().endswith("abs") or "large breasts" in key.lower()) and value > 0.8:
                     # Increase the numerical value
                     value *= 1.25
 
@@ -330,7 +334,8 @@ class OllamaVts:
                 if value > 1.5:
                     value = 1.5
 
-                value *= multiply
+                if not "breast" in key.lower() and not "abs" in key.lower():
+                    value *= multiply
 
                 # Round the value to 2 decimal places
                 value = round(value, 2)
@@ -339,6 +344,10 @@ class OllamaVts:
                 if value > 0:
                     # If it is, add the pair to the filtered values list
                     filtered_values.append(f"{key}:{value})")
+                    if "large breasts" in key.lower() and value > 0.5:
+                        filtered_values.append(f"(enormous breasts:{value})")
+                        filtered_values.append(f"(big breasts:{value})")
+                        filtered_values.append(f"(huge breasts:{value})")
                 else:
                     # Otherwise, add the pair to the zero or less values list
                     zero_or_less_values.append(f"{key}:1.2)")
@@ -465,7 +474,7 @@ class OllamaVts:
 
         character_positive_face_text = f"{base_positive}, {base_positive_face}, {OllamaVts.to_text(character_face_comma_text_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_results)}"
         character_negative_face_text = f"{base_negative}, {OllamaVts.to_text(character_ethnicity_tags_text_neg_results)}"
-        character_positive_text = f"{base_positive}, {OllamaVts.to_text(character_comma_text_results)}, {OllamaVts.to_text(character_face_comma_text_results)}, {OllamaVts.to_text(character_body_tags_text_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_results)}"
+        character_positive_text = f"{base_positive}, {OllamaVts.to_text(character_face_comma_text_results)}, {OllamaVts.to_text(character_comma_text_results)}, {OllamaVts.to_text(character_body_tags_text_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_results)}"
         character_negative_text = f"{base_negative}, {OllamaVts.to_text(character_body_tags_text_neg_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_neg_results)}"
 
         output_dictionary = {
