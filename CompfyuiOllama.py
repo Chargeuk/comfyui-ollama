@@ -123,6 +123,7 @@ class OllamaVts:
                 "base_negative": ("STRING", {"default": "cartoon, cgi, render, illustration, painting, drawing, cartoon, (worst quality, low quality, normal quality:2), out of focus", "multiline": True}),
                 "split_text": ("STRING", {"default": "-----", "multiline": False}),
                 "character_face_text": ("STRING", {"default": "", "multiline": True}),
+                "character_face_and_body_text": ("STRING", {"default": "", "multiline": True}),
                 "character_body_text": ("STRING", {"default": "", "multiline": True}),
                 "character_muscle_text": ("STRING", {"default": "", "multiline": True}),
                 "character_face_comma_text": ("STRING", {"default": "", "multiline": True}),
@@ -202,6 +203,7 @@ class OllamaVts:
         "STRING",
         "STRING",
         "STRING",
+        "STRING",
         "STRING"
     )
     OUTPUT_IS_LIST = (
@@ -210,12 +212,13 @@ class OllamaVts:
         True,
         True,
         True,
+        True,
+        True,
+        True,
         False,
         False,
         True,
         True,
-        False,
-        False,
         False,
         False,
         True,
@@ -226,6 +229,7 @@ class OllamaVts:
 
     RETURN_NAMES = (
         "character_face_text",
+        "character_face_and_body_text",
         "character_body_text",
         "character_muscle_text",
         "character_face_comma_text",
@@ -261,34 +265,38 @@ class OllamaVts:
         texts = query.split(split_text)
         finalResults = []
         for text in texts:
-            # remove any leading or trailing whitespace
-            text = text.strip()
-            #remove any leading or trailing newline characters
-            text = text.strip("\n")
-            # remove any leading or trailing whitespace
-            text = text.strip()
+            try:
+                # remove any leading or trailing whitespace
+                text = text.strip()
+                #remove any leading or trailing newline characters
+                text = text.strip("\n")
+                # remove any leading or trailing whitespace
+                text = text.strip()
+                print("calling Ollama Vision")
+                result = client.generate(
+                    model=model,
+                    prompt=text,
+                    images=images,
+                    keep_alive=used_keep_alive,
+                    format=format,
+                    options={
+                        "seed": seed,
+                        "top_k": top_k,
+                        "top_p": top_p,
+                        "temperature": temperature,
+                        "repeat_penalty": repetition_penalty,
+                        "num_ctx": max_new_tokens,
+                    }
+                )
+                print("received Ollama Vision Response")
+                print(f"""[Ollama Vision]
+    - query: {text}
+    - result: {result['response']}
 
-            result = client.generate(
-                model=model,
-                prompt=text,
-                images=images,
-                keep_alive=used_keep_alive,
-                format=format,
-                options={
-                    "seed": seed,
-                    "top_k": top_k,
-                    "top_p": top_p,
-                    "temperature": temperature,
-                    "repeat_penalty": repetition_penalty,
-                    "num_ctx": max_new_tokens,
-                }
-            )
-            print(f"""[Ollama Vision]
-- query: {text}
-- result: {result['response']}
-
-""")
-            finalResults.append(result['response'])
+    """)
+                finalResults.append(result['response'])
+            except Exception as e:
+                print(f"Error calling OllamaVision: {e}")
         return finalResults
     
     @staticmethod
@@ -422,6 +430,7 @@ class OllamaVts:
         base_negative: str,
         split_text: str,
         character_face_text: str,
+        character_face_and_body_text: str,
         character_body_text: str,
         character_muscle_text: str,
         character_face_comma_text: str,
@@ -441,15 +450,17 @@ class OllamaVts:
         character_images_binary = [character_image_binary]
         
         character_face_text_results = OllamaVts.calculate_results(client, model, character_face_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+        character_face_and_body_text_results = OllamaVts.calculate_results(client, model, character_face_and_body_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
         character_body_text_results = OllamaVts.calculate_results(client, model, character_body_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
         character_muscle_text_results = OllamaVts.calculate_results(client, model, character_muscle_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+
         # character_text_results is the character_body_text_results array concatenated to the character_face_text_results array
-        character_face_and_body_results = character_face_text_results + character_body_text_results
-        character_body_and_muscle_results = character_body_text_results + character_muscle_text_results
-        character_face_and_body_and_muscle_results = character_face_text_results + character_body_text_results + character_muscle_text_results
+        character_full_results = character_face_and_body_text_results + character_face_text_results + character_body_text_results
+        character_body_and_muscle_results = character_face_and_body_text_results + character_body_text_results + character_muscle_text_results
+
         # character_text is the character_text_results array concatenated to a single string with a newline character as the separator and enclosed in ``` characters
-        character_face_and_body_statement = "```\n" + OllamaVts.to_text(character_face_and_body_results) + "\n```"
-        # character_full_text = "```\n" + OllamaVts.to_text(character_text_muscle_results) + "\n```"
+        character_full_statement = "```\n" + OllamaVts.to_text(character_full_results) + "\n```"
+        character_face_and_body_statement = "```\n" + OllamaVts.to_text(character_face_and_body_text_results) + "\n```"
         character_face_statement = "```\n" + OllamaVts.to_text(character_face_text_results) + "\n```"
         character_body_statement = "```\n" + OllamaVts.to_text(character_body_text_results) + "\n```"
         character_body_and_muscle_results_statement = "```\n" + OllamaVts.to_text(character_body_and_muscle_results) + "\n```"
@@ -457,10 +468,13 @@ class OllamaVts:
         used_character_face_comma_text = character_face_comma_text + character_face_statement
         character_face_comma_text_results = OllamaVts.calculate_results(client, model, used_character_face_comma_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
 
+        used_character_face_and_body_comma_text = character_comma_text + character_face_and_body_statement
+        character_face_and_body_comma_text_results = OllamaVts.calculate_results(client, model, used_character_face_and_body_comma_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+
         used_character_comma_text = character_comma_text + character_body_statement
         character_comma_text_results = OllamaVts.calculate_results(client, model, used_character_comma_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
 
-        used_ethnicity_text = character_ethnicity_tags_text + character_face_and_body_statement
+        used_ethnicity_text = character_ethnicity_tags_text + character_full_statement
         character_ethnicity_tags_text_results, character_ethnicity_tags_text_neg_results = OllamaVts.filter_values(
             OllamaVts.calculate_results(client, model, used_ethnicity_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens),
             ethnicity_tags_multiply
@@ -472,13 +486,14 @@ class OllamaVts:
             body_tags_multiply
         )
 
-        character_positive_face_text = f"{base_positive}, {base_positive_face}, {OllamaVts.to_text(character_face_comma_text_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_results)}"
+        character_positive_face_text = f"{base_positive}, {base_positive_face}, {OllamaVts.to_text(character_face_and_body_comma_text_results)}, {OllamaVts.to_text(character_face_comma_text_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_results)}"
         character_negative_face_text = f"{base_negative}, {OllamaVts.to_text(character_ethnicity_tags_text_neg_results)}"
-        character_positive_text = f"{base_positive}, {OllamaVts.to_text(character_face_comma_text_results)}, {OllamaVts.to_text(character_comma_text_results)}, {OllamaVts.to_text(character_body_tags_text_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_results)}"
+        character_positive_text = f"{base_positive}, {OllamaVts.to_text(character_face_and_body_comma_text_results)}, {OllamaVts.to_text(character_comma_text_results)}, {OllamaVts.to_text(character_body_tags_text_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_results)}"
         character_negative_text = f"{base_negative}, {OllamaVts.to_text(character_body_tags_text_neg_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_neg_results)}"
 
         output_dictionary = {
             "character_face_text": OllamaVts.to_text(character_face_text_results),
+            "character_face_and_body_text": OllamaVts.to_text(character_face_and_body_text_results),
             "character_body_text": OllamaVts.to_text(character_body_text_results),
             "character_muscle_text": OllamaVts.to_text(character_muscle_text_results),
             "character_face_comma_text": OllamaVts.to_text(character_face_comma_text_results),
@@ -502,6 +517,7 @@ class OllamaVts:
         base_negative: str,
         split_text: str,
         character_face_text: str,
+        character_face_and_body_text: str,
         character_body_text: str,
         character_muscle_text: str,
         character_face_comma_text: str,
@@ -547,6 +563,7 @@ request query params:
         character_positive_texts = []
         character_negative_texts = []
         character_face_text_results = []
+        character_face_and_body_text_results = []
         character_body_text_results = []
         character_muscle_text_results = []
         character_face_comma_text_results = []
@@ -567,6 +584,7 @@ request query params:
                 base_negative,
                 split_text,
                 character_face_text,
+                character_face_and_body_text,
                 character_body_text,
                 character_muscle_text,
                 character_face_comma_text,
@@ -588,6 +606,7 @@ request query params:
             character_positive_texts.append(results_dictionary["character_positive_text"])
             character_negative_texts.append(results_dictionary["character_negative_text"])
             character_face_text_results.append(results_dictionary["character_face_text"])
+            character_face_and_body_text_results.append(results_dictionary["character_face_and_body_text"])
             character_body_text_results.append(results_dictionary["character_body_text"])
             character_muscle_text_results.append(results_dictionary["character_muscle_text"])
             character_face_comma_text_results.append(results_dictionary["character_face_comma_text"])
@@ -608,6 +627,7 @@ request query params:
 
         return (
                 character_face_text_results,
+                character_face_and_body_text_results,
                 character_body_text_results,
                 character_muscle_text_results,
                 character_face_comma_text_results,
