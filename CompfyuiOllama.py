@@ -647,7 +647,7 @@ request query params:
             )
 
 
-class OllamaWanVts:
+class OllamaImageQuestionsVts:
     def __init__(self):
         pass
 
@@ -656,35 +656,36 @@ class OllamaWanVts:
         seed = random.randint(1, 2 ** 31)
         return {
             "required": {
-                "base_positive": ("STRING", {"default": "(photorealistic:1.2) (photo:1.2)", "multiline": True}),
-                "base_positive_face": ("STRING", {"default": "a beautiful face with lots of detail and striking eyes", "multiline": True}),
-                "base_negative": ("STRING", {"default": "cartoon, cgi, render, illustration, painting, drawing, cartoon, (worst quality, low quality, normal quality:2), out of focus", "multiline": True}),
+                "system": ("STRING", {
+                    "multiline": True,
+                    "default": "You are an art expert, gracefully answering questions about images. You are always direct and to the point, answering with confidence and without prefix or postfix text.",
+                    "title":"system"
+                }),
                 "split_text": ("STRING", {"default": "-----", "multiline": False}),
-                "character_face_text": ("STRING", {"default": "", "multiline": True}),
-                "character_face_and_body_text": ("STRING", {"default": "", "multiline": True}),
-                "character_body_text": ("STRING", {"default": "", "multiline": True}),
-                "character_muscle_text": ("STRING", {"default": "", "multiline": True}),
-                "character_face_comma_text": ("STRING", {"default": "", "multiline": True}),
-                "character_comma_text": ("STRING", {"default": "", "multiline": True}),
-                "character_body_tags_text": ("STRING", {"default": "", "multiline": True}),
-                "character_ethnicity_tags_text": ("STRING", {"default": "", "multiline": True}),
-                "environment_text": ("STRING", {"default": "", "multiline": True}),
-                "environment_comma_text": ("STRING", {"default": "", "multiline": True}),
-                "environment_images": ("IMAGE",),
-                "character_images": ("IMAGE",),
+                "questions": ("STRING", {"default": "", "multiline": True}),
+                "input_text": ("STRING", {"default": "", "multiline": True}),
+                "ordering_input": ("STRING", {"default": "", "multiline": False}),
+                "triple_quote_input_text": (["enable", "disable"],),
                 "debug": (["enable", "disable"],),
                 "url": ("STRING", {
                     "multiline": False,
                     "default": "http://127.0.0.1:11434"
                 }),
-                "model": ((), {}),
+                # model settings
                 "keep_alive": ("INT", {"default": 5, "min": -1, "max": 60, "step": 1}),
+                "model": ((), {}),
                 "format": (["text", "json",''],),
                 "seed": ("INT", {"default": seed, "min": 0, "max": 2 ** 31, "step": 1}),
                 "top_p": (
                     "FLOAT",
                     {
                         "default": 0.8,
+                    },
+                ),
+                "min_p": (
+                    "FLOAT",
+                    {
+                        "default": 0.01,
                     },
                 ),
                 "top_k": (
@@ -709,88 +710,32 @@ class OllamaWanVts:
                         "default": 2048,
                     },
                 ),
-                "body_tags_multiply": (
-                    "FLOAT",
-                    {
-                        "default": 1.00,
-                    },
-                ),
-                "ethnicity_tags_multiply": (
-                    "FLOAT",
-                    {
-                        "default": 1.00,
-                    },
-                ),
             },
+            "optional":
+                    {"images": ("IMAGE",),},
         }
+    
+    INPUT_IS_LIST = True
 
     RETURN_TYPES = (
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "STRING"
+        "STRING", # question answers output
+        "STRING", # ordering_output
     )
     OUTPUT_IS_LIST = (
-        True,
-        True,
-        True,
-        True,
-        True,
-        True,
-        True,
-        True,
-        False,
-        False,
-        True,
-        True,
-        False,
-        False,
-        True,
-        True,
-        True,
-        True
+        True, # question answers output is a list of string, 1 item per image
+        False, # ordering_output is a single string
     )
 
     RETURN_NAMES = (
-        "character_face_text",
-        "character_face_and_body_text",
-        "character_body_text",
-        "character_muscle_text",
-        "character_face_comma_text",
-        "character_comma_text",
-        "character_body_tags_text",
-        "character_ethnicity_tags_text",
-        "environment_text",
-        "environment_comma_text",
-        "character_neg_body_tags_text",
-        "character_neg_ethnicity_tags_text",
-        "environment_positive_text",
-        "environment_negative_text",
-        "character_positive_face_texts",
-        "character_negative_face_texts",
-        "character_positive_texts",
-        "character_negative_texts"
+        "answers", # question answers output
+        "ordering_output", # ordering_output
     )
 
     FUNCTION = "ollama_vision"
     CATEGORY = "Ollama"
 
     @staticmethod
-    def calculate_results(client, model, query: str, split_text: str, images, keep_alive: int, format: str, seed: int, top_p: float, top_k: int, temperature: float, repetition_penalty: float, max_new_tokens: int) -> List[str]:
+    def calculate_results(client, model, system: str, query: str, split_text: str, images, input_text: str, keep_alive: int, format: str, seed: int, top_p: float, min_p: float, top_k: int, temperature: float, repetition_penalty: float, max_new_tokens: int) -> List[str]:
         # if text is empty, or whitespace, return empty string
         if not query or not query.strip():
             return ""
@@ -810,9 +755,12 @@ class OllamaWanVts:
                 text = text.strip("\n")
                 # remove any leading or trailing whitespace
                 text = text.strip()
+                if input_text:
+                    text = f"{text}\n{input_text}"
                 print("calling Ollama Vision")
                 result = client.generate(
                     model=model,
+                    system=system,
                     prompt=text,
                     images=images,
                     keep_alive=used_keep_alive,
@@ -820,6 +768,7 @@ class OllamaWanVts:
                     options={
                         "seed": seed,
                         "top_k": top_k,
+                        "min_p": min_p,
                         "top_p": top_p,
                         "temperature": temperature,
                         "repeat_penalty": repetition_penalty,
@@ -909,6 +858,8 @@ class OllamaWanVts:
     @staticmethod
     def get_binary_images(images) -> List[bytes]:
         images_binary = []
+        if images == None:
+            return images_binary
 
         for (batch_number, image) in enumerate(images):
             # Convert tensor to numpy array
@@ -957,134 +908,59 @@ class OllamaWanVts:
 
         return merged_text
     
-    @staticmethod
-    def get_character_texts(
-        client,
-        model: str,
-        mid_question_alive: int,
-        character_image_binary: bytes,
-        base_positive: str,
-        base_positive_face: str,
-        base_negative: str,
-        split_text: str,
-        character_face_text: str,
-        character_face_and_body_text: str,
-        character_body_text: str,
-        character_muscle_text: str,
-        character_face_comma_text: str,
-        character_comma_text: str,
-        character_body_tags_text: str,
-        character_ethnicity_tags_text: str,
-        seed: int,
-        format: str,                      # Assuming it's either "text", "json", or an empty string
-        top_p: float,
-        top_k: int,
-        temperature: float,
-        repetition_penalty: float,
-        max_new_tokens: int,
-        body_tags_multiply: float,
-        ethnicity_tags_multiply: float,
-    ) -> dict[str, str]:
-        character_images_binary = [character_image_binary]
-        
-        character_face_text_results = OllamaVts.calculate_results(client, model, character_face_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        character_face_and_body_text_results = OllamaVts.calculate_results(client, model, character_face_and_body_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        character_body_text_results = OllamaVts.calculate_results(client, model, character_body_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        character_muscle_text_results = OllamaVts.calculate_results(client, model, character_muscle_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-
-        # character_text_results is the character_body_text_results array concatenated to the character_face_text_results array
-        character_full_results = character_face_and_body_text_results + character_face_text_results + character_body_text_results
-        character_body_and_muscle_results = character_face_and_body_text_results + character_body_text_results + character_muscle_text_results
-
-        # character_text is the character_text_results array concatenated to a single string with a newline character as the separator and enclosed in ``` characters
-        character_full_statement = "```\n" + OllamaVts.to_text(character_full_results) + "\n```"
-        character_face_and_body_statement = "```\n" + OllamaVts.to_text(character_face_and_body_text_results) + "\n```"
-        character_face_statement = "```\n" + OllamaVts.to_text(character_face_text_results) + "\n```"
-        character_body_statement = "```\n" + OllamaVts.to_text(character_body_text_results) + "\n```"
-        character_body_and_muscle_results_statement = "```\n" + OllamaVts.to_text(character_body_and_muscle_results) + "\n```"
-
-        used_character_face_comma_text = character_face_comma_text + character_face_statement
-        character_face_comma_text_results = OllamaVts.calculate_results(client, model, used_character_face_comma_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-
-        used_character_face_and_body_comma_text = character_comma_text + character_face_and_body_statement
-        character_face_and_body_comma_text_results = OllamaVts.calculate_results(client, model, used_character_face_and_body_comma_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-
-        used_character_comma_text = character_comma_text + character_body_statement
-        character_comma_text_results = OllamaVts.calculate_results(client, model, used_character_comma_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-
-        used_ethnicity_text = character_ethnicity_tags_text + character_full_statement
-        character_ethnicity_tags_text_results, character_ethnicity_tags_text_neg_results = OllamaVts.filter_values(
-            OllamaVts.calculate_results(client, model, used_ethnicity_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens),
-            ethnicity_tags_multiply
-        )
-
-        used_body_tags_text = character_body_tags_text + character_body_and_muscle_results_statement
-        character_body_tags_text_results, character_body_tags_text_neg_results = OllamaVts.filter_values(
-            OllamaVts.calculate_results(client, model, used_body_tags_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens),
-            body_tags_multiply
-        )
-
-        character_positive_face_text = f"{base_positive}, {base_positive_face}, {OllamaVts.to_text(character_face_and_body_comma_text_results)}, {OllamaVts.to_text(character_face_comma_text_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_results)}"
-        character_negative_face_text = f"{base_negative}, {OllamaVts.to_text(character_ethnicity_tags_text_neg_results)}"
-        character_positive_text = f"{base_positive}, {OllamaVts.to_text(character_face_and_body_comma_text_results)}, {OllamaVts.to_text(character_comma_text_results)}, {OllamaVts.to_text(character_body_tags_text_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_results)}"
-        character_negative_text = f"{base_negative}, {OllamaVts.to_text(character_body_tags_text_neg_results)}, {OllamaVts.to_text(character_ethnicity_tags_text_neg_results)}"
-
-        output_dictionary = {
-            "character_face_text": OllamaVts.to_text(character_face_text_results),
-            "character_face_and_body_text": OllamaVts.to_text(character_face_and_body_text_results),
-            "character_body_text": OllamaVts.to_text(character_body_text_results),
-            "character_muscle_text": OllamaVts.to_text(character_muscle_text_results),
-            "character_face_comma_text": OllamaVts.to_text(character_face_comma_text_results),
-            "character_comma_text": OllamaVts.to_text(character_comma_text_results),
-            "character_body_tags_text": OllamaVts.to_text(character_body_tags_text_results),
-            "character_ethnicity_tags_text": OllamaVts.to_text(character_ethnicity_tags_text_results),
-            "character_neg_body_tags_text": OllamaVts.to_text(character_body_tags_text_neg_results),
-            "character_ethnicity_tags_text_neg": OllamaVts.to_text(character_ethnicity_tags_text_neg_results),
-            "character_positive_face_text": OllamaVts.to_text(character_positive_face_text),
-            "character_negative_face_text": OllamaVts.to_text(character_negative_face_text),
-            "character_positive_text": OllamaVts.to_text(character_positive_text),
-            "character_negative_text": OllamaVts.to_text(character_negative_text),
-        }
-
-        return output_dictionary
-
     def ollama_vision(
         self,
-        base_positive: str,
-        base_positive_face: str,
-        base_negative: str,
+        system: str,
         split_text: str,
-        character_face_text: str,
-        character_face_and_body_text: str,
-        character_body_text: str,
-        character_muscle_text: str,
-        character_face_comma_text: str,
-        character_comma_text: str,
-        character_body_tags_text: str,
-        character_ethnicity_tags_text: str,
-        environment_text: str,
-        environment_comma_text: str,
-        environment_images,
-        character_images,
+        questions: str,
+        input_text: str,
+        ordering_input: str,
+        triple_quote_input_text: str,
         debug: str,                       # Assuming it's either "enable" or "disable"
         url: str,
-        model: str,                       # Assuming it's a string
-        seed: int,
         keep_alive: int,
+        model: str,                       # Assuming it's a string
         format: str,                      # Assuming it's either "text", "json", or an empty string
+        seed: int,
         top_p: float,
+        min_p: float,
         top_k: int,
         temperature: float,
         repetition_penalty: float,
         max_new_tokens: int,
-        body_tags_multiply: float,
-        ethnicity_tags_multiply: float,
+        images = [],
     ):
+        print(f"len(images): {len(images)}")
+        # as input is list, we need to manually set each item that should not be a list to the first item
+        if len(images) > 0:
+            images = images[0]
+        else:
+            images = None
+        system = system[0]
+        split_text = split_text[0]
+        questions = questions[0]
+        # input_text = input_text[0] - don't do input_text as it is valid for it to be a list
+        ordering_input = ordering_input[0]
+        triple_quote_input_text = triple_quote_input_text[0]
+        debug = debug[0]
+        url = url[0]
+        keep_alive = keep_alive[0]
+        model = model[0]
+        format = format[0]
+        seed = seed[0]
+        top_p = top_p[0]
+        min_p = min_p[0]
+        top_k = top_k[0]
+        temperature = temperature[0]
+        repetition_penalty = repetition_penalty[0]
+        max_new_tokens = max_new_tokens[0]
+
+        print(f"system: {system}")
+
         if format == "text":
             format = ''
 
-        environment_images_binary = OllamaVts.get_binary_images(environment_images)
-        character_images_binary = OllamaVts.get_binary_images(character_images)
+        images_binary = OllamaImageQuestionsVts.get_binary_images(images)
 
         client = Client(host=url)
         if debug == "enable":
@@ -1095,94 +971,43 @@ request query params:
 - model: {model}
 
 """)
+
         mid_question_alive = 5
-        character_positive_face_texts = []
-        character_negative_face_texts = []
-        character_positive_texts = []
-        character_negative_texts = []
-        character_face_text_results = []
-        character_face_and_body_text_results = []
-        character_body_text_results = []
-        character_muscle_text_results = []
-        character_face_comma_text_results = []
-        character_comma_text_results = []
-        character_body_tags_text_results = []
-        character_ethnicity_tags_text_results = []
-        character_body_tags_text_neg_results = []
-        character_ethnicity_tags_text_neg_results = []
+        answers = []
+        number_of_images = len(images_binary)
+        number_of_input_texts = len(input_text)
+        max_length = max(number_of_images, number_of_input_texts)
 
-        for character_image_count, character_image_binary in enumerate(character_images_binary):
-            results_dictionary = OllamaVts.get_character_texts(
-                client,
-                model,
-                mid_question_alive,
-                character_image_binary,
-                base_positive,
-                base_positive_face,
-                base_negative,
-                split_text,
-                character_face_text,
-                character_face_and_body_text,
-                character_body_text,
-                character_muscle_text,
-                character_face_comma_text,
-                character_comma_text,
-                character_body_tags_text,
-                character_ethnicity_tags_text,
-                seed,
-                format,
-                top_p,
-                top_k,
-                temperature,
-                repetition_penalty,
-                max_new_tokens,
-                body_tags_multiply,
-                ethnicity_tags_multiply,
-            )
-            character_positive_face_texts.append(results_dictionary["character_positive_face_text"])
-            character_negative_face_texts.append(results_dictionary["character_negative_face_text"])
-            character_positive_texts.append(results_dictionary["character_positive_text"])
-            character_negative_texts.append(results_dictionary["character_negative_text"])
-            character_face_text_results.append(results_dictionary["character_face_text"])
-            character_face_and_body_text_results.append(results_dictionary["character_face_and_body_text"])
-            character_body_text_results.append(results_dictionary["character_body_text"])
-            character_muscle_text_results.append(results_dictionary["character_muscle_text"])
-            character_face_comma_text_results.append(results_dictionary["character_face_comma_text"])
-            character_comma_text_results.append(results_dictionary["character_comma_text"])
-            character_body_tags_text_results.append(results_dictionary["character_body_tags_text"])
-            character_ethnicity_tags_text_results.append(results_dictionary["character_ethnicity_tags_text"])
-            character_body_tags_text_neg_results.append(results_dictionary["character_neg_body_tags_text"])
-            character_ethnicity_tags_text_neg_results.append(results_dictionary["character_ethnicity_tags_text_neg"])
+        print(f"number_of_images: {number_of_images}")
+        print(f"number_of_input_texts: {number_of_input_texts}")
+        print(f"max_length: {max_length}")
+        print(f"input_text: {input_text}")
 
-        environment_text_results = OllamaVts.calculate_results(client, model, environment_text, split_text, environment_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
-        environment_text = "```\n" + OllamaVts.to_text(environment_text_results) + "\n```"
+        for i in range(max_length):
+            usedInputTextIndex = min(i, number_of_input_texts - 1)
+            usedInputImageIndex = min(i, number_of_images - 1)
+            print(f"i: {i}")
+            print(f"usedInputTextIndex: {usedInputTextIndex}")
+            print(f"usedInputImageIndex: {usedInputImageIndex}")
+            used_input_text = input_text[usedInputTextIndex] if usedInputTextIndex >= 0 else None
+            image_binary = images_binary[usedInputImageIndex] if usedInputImageIndex >= 0 else None
 
-        used_environment_comma_text = environment_comma_text + environment_text
-        environment_comma_text_results = OllamaVts.calculate_results(client, model, used_environment_comma_text, split_text, None, keep_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
+            if used_input_text:
+                print(f"used_input_text: {used_input_text}")
+                used_input_text = used_input_text.strip()
+                used_input_text = f"```{used_input_text}```"
 
-        environment_positive_text = f"{base_positive}, {OllamaVts.to_text(environment_comma_text_results)}"
-        environment_negative_text = base_negative
+            if image_binary:
+                image_binary = [image_binary]
 
-        return (
-                character_face_text_results,
-                character_face_and_body_text_results,
-                character_body_text_results,
-                character_muscle_text_results,
-                character_face_comma_text_results,
-                character_comma_text_results,
-                character_body_tags_text_results,
-                character_ethnicity_tags_text_results,
-                environment_text_results,
-                environment_comma_text_results,
-                character_body_tags_text_neg_results,
-                character_ethnicity_tags_text_neg_results,
-                environment_positive_text,
-                environment_negative_text,
-                character_positive_face_texts,
-                character_negative_face_texts,
-                character_positive_texts,
-                character_negative_texts
-            )
+            used_keep_alive = mid_question_alive
+            if i == max_length - 1:
+                used_keep_alive = keep_alive
+            answer = OllamaImageQuestionsVts.calculate_results(client, model, system, questions, split_text, image_binary, used_input_text, used_keep_alive, format, seed, top_p, min_p, top_k, temperature, repetition_penalty, max_new_tokens)
+            answers.append(OllamaImageQuestionsVts.to_text(answer))
+
+        ordering_output = ordering_input
+        return (answers, ordering_output)
 
 
 class OllamaGenerate:
@@ -1401,7 +1226,7 @@ class OllamaLoadContext:
 NODE_CLASS_MAPPINGS = {
     "OllamaVision": OllamaVision,
     "OllamaVts": OllamaVts,
-    "OllamaWanVts": OllamaWanVts,
+    "OllamaImageQuestionsVts": OllamaImageQuestionsVts,
     "OllamaGenerate": OllamaGenerate,
     "OllamaGenerateAdvance": OllamaGenerateAdvance,
     "OllamaSaveContext": OllamaSaveContext,
@@ -1411,7 +1236,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "OllamaVision": "Ollama Vision",
     "OllamaVts": "Ollama Vts",
-    "OllamaWanVts": "Ollama Wan Vts",
+    "OllamaImageQuestionsVts": "Ollama Image Questions Vts",
     "OllamaGenerate": "Ollama Generate",
     "OllamaGenerateAdvance": "Ollama Generate Advance",
     "OllamaSaveContext": "Ollama Save Context",
