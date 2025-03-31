@@ -255,7 +255,7 @@ class OllamaVts:
     def calculate_results(client, model, query: str, split_text: str, images, keep_alive: int, format: str, seed: int, top_p: float, top_k: int, temperature: float, repetition_penalty: float, max_new_tokens: int) -> List[str]:
         # if text is empty, or whitespace, return empty string
         if not query or not query.strip():
-            return ""
+            return []
 
         used_keep_alive = str(keep_alive) + "m"
         if keep_alive == 0:
@@ -454,7 +454,7 @@ class OllamaVts:
         character_body_text_results = OllamaVts.calculate_results(client, model, character_body_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
         character_muscle_text_results = OllamaVts.calculate_results(client, model, character_muscle_text, split_text, character_images_binary, mid_question_alive, format, seed, top_p, top_k, temperature, repetition_penalty, max_new_tokens)
 
-        # character_text_results is the character_body_text_results array concatenated to the character_face_text_results array
+        # character_text_results is the character_body_text_results array concatenated to the character_face_text_results array //
         character_full_results = character_face_and_body_text_results + character_face_text_results + character_body_text_results
         character_body_and_muscle_results = character_face_and_body_text_results + character_body_text_results + character_muscle_text_results
 
