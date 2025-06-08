@@ -1072,8 +1072,6 @@ class OllamaSettingsVts:
                 ),
             }
         }
-    
-    INPUT_IS_LIST = True
 
     RETURN_TYPES = (
         "STRING",
