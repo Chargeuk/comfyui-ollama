@@ -1009,6 +1009,152 @@ request query params:
         ordering_output = ordering_input
         return (answers, ordering_output)
 
+class OllamaSettingsVts:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(s):
+        seed = random.randint(1, 2 ** 31)
+        return {
+            "required": {
+                "system": ("STRING", {
+                    "multiline": True,
+                    "default": "You are an art expert, gracefully answering questions about images. You are always direct and to the point, answering with confidence and without prefix or postfix text.",
+                    "title":"system"
+                }),
+                "split_text": ("STRING", {"default": "-----", "multiline": False}),
+                "ordering_input": ("STRING", {"default": "", "multiline": False}),
+                "triple_quote_input_text": (["enable", "disable"],),
+                "debug": (["enable", "disable"],),
+                "url": ("STRING", {
+                    "multiline": False,
+                    "default": "http://127.0.0.1:11434"
+                }),
+                # model settings
+                "keep_alive": ("INT", {"default": 5, "min": -1, "max": 60, "step": 1}),
+                "model": ((), {}),
+                "format": (["text", "json",''],),
+                "seed": ("INT", {"default": seed, "min": 0, "max": 2 ** 31, "step": 1}),
+                "top_p": (
+                    "FLOAT",
+                    {
+                        "default": 0.8,
+                    },
+                ),
+                "min_p": (
+                    "FLOAT",
+                    {
+                        "default": 0.01,
+                    },
+                ),
+                "top_k": (
+                    "INT",
+                    {
+                        "default": 100,
+                    },
+                ),
+                "temperature": (
+                    "FLOAT",
+                    {"default": 0.7, "min": 0, "max": 1, "step": 0.1},
+                ),
+                "repetition_penalty": (
+                    "FLOAT",
+                    {
+                        "default": 1.05,
+                    },
+                ),
+                "max_new_tokens": (
+                    "INT",
+                    {
+                        "default": 2048,
+                    },
+                ),
+            }
+        }
+    
+    INPUT_IS_LIST = True
+
+    RETURN_TYPES = (
+        "STRING",
+        "STRING", 
+        "STRING", 
+        "STRING", 
+        "STRING", 
+        "STRING", 
+        "INT", 
+        "STRING", 
+        "STRING", 
+        "INT",
+        "FLOAT",
+        "FLOAT",
+        "INT",
+        "FLOAT",
+        "FLOAT",
+        "INT",
+    )
+
+    RETURN_NAMES = (
+        "system",
+        "split_text",
+        "ordering_input",
+        "triple_quote_input_text",
+        "debug",
+        "url",
+        "keep_alive",
+        "model",
+        "format",
+        "seed",
+        "top_p",
+        "min_p",
+        "top_k",
+        "temperature",
+        "repetition_penalty",
+        "max_new_tokens",
+    )
+
+    FUNCTION = "ollama_vision"
+    CATEGORY = "Ollama"
+
+    def ollama_vision(
+        self,
+        system: str,
+        split_text: str,
+        ordering_input: str,
+        triple_quote_input_text: str,
+        debug: str,                       # Assuming it's either "enable" or "disable"
+        url: str,
+        keep_alive: int,
+        model: str,                       # Assuming it's a string
+        format: str,                      # Assuming it's either "text", "json", or an empty string
+        seed: int,
+        top_p: float,
+        min_p: float,
+        top_k: int,
+        temperature: float,
+        repetition_penalty: float,
+        max_new_tokens: int,
+    ):
+
+        return (system,
+                split_text,
+                ordering_input,
+                triple_quote_input_text,
+                debug,
+                url,
+                keep_alive,
+                model,
+                format,
+                seed,
+                top_p,
+                min_p,
+                top_k,
+                temperature,
+                repetition_penalty,
+                max_new_tokens,
+                )
+
+
 
 class OllamaGenerate:
     def __init__(self):
@@ -1227,6 +1373,7 @@ NODE_CLASS_MAPPINGS = {
     "OllamaVision": OllamaVision,
     "OllamaVts": OllamaVts,
     "OllamaImageQuestionsVts": OllamaImageQuestionsVts,
+    "OllamaSettingsVts": OllamaSettingsVts,
     "OllamaGenerate": OllamaGenerate,
     "OllamaGenerateAdvance": OllamaGenerateAdvance,
     "OllamaSaveContext": OllamaSaveContext,
@@ -1237,6 +1384,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "OllamaVision": "Ollama Vision",
     "OllamaVts": "Ollama Vts",
     "OllamaImageQuestionsVts": "Ollama Image Questions Vts",
+    "OllamaSettingsVts": "Ollama Settings Vts",
     "OllamaGenerate": "Ollama Generate",
     "OllamaGenerateAdvance": "Ollama Generate Advance",
     "OllamaSaveContext": "Ollama Save Context",
