@@ -184,6 +184,9 @@ class OllamaVts:
                     },
                 ),
             },
+            "optional": {
+                "passthrough": ("BOOLEAN",),
+            }
         }
 
     RETURN_TYPES = (
@@ -541,7 +544,29 @@ class OllamaVts:
         max_new_tokens: int,
         body_tags_multiply: float,
         ethnicity_tags_multiply: float,
+        passthrough: bool = False
     ):
+        if passthrough:
+            return (
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                "",
+                "",
+                [],
+                [],
+                "",
+                "",
+                [],
+                [],
+                [],
+                [],)
+
         if format == "text":
             format = ''
 
@@ -712,7 +737,11 @@ class OllamaImageQuestionsVts:
                 ),
             },
             "optional":
-                    {"images": ("IMAGE",),},
+                    {
+                        "images": ("IMAGE",),
+                        "passthrough": ("BOOLEAN", {"default": False}),
+                    }
+
         }
     
     INPUT_IS_LIST = True
@@ -929,7 +958,9 @@ class OllamaImageQuestionsVts:
         repetition_penalty: float,
         max_new_tokens: int,
         images = [],
+        passthrough: bool = False
     ):
+        
         print(f"len(images): {len(images)}")
         # as input is list, we need to manually set each item that should not be a list to the first item
         if len(images) > 0:
@@ -954,6 +985,10 @@ class OllamaImageQuestionsVts:
         temperature = temperature[0]
         repetition_penalty = repetition_penalty[0]
         max_new_tokens = max_new_tokens[0]
+        passthrough = passthrough[0]
+
+        if passthrough:
+            return ([], ordering_input)
 
         print(f"system: {system}")
 
