@@ -988,7 +988,7 @@ class OllamaImageQuestionsVts:
         passthrough = passthrough[0]
 
         if passthrough:
-            return ([], ordering_input)
+            return ([""], ordering_input)
 
         print(f"system: {system}")
 
@@ -1042,6 +1042,8 @@ request query params:
             answers.append(OllamaImageQuestionsVts.to_text(answer))
 
         ordering_output = ordering_input
+        if len(answers) == 0:
+            answers.append("")
         return (answers, ordering_output)
 
 class OllamaSettingsVts:
