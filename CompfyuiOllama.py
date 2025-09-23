@@ -29,6 +29,23 @@ async def get_models_endpoint(request):
     except Exception as e:
         models = [model['name'] for model in models]
         return web.json_response(models)
+    
+
+def unload_model(client, model):
+    # if text is empty, or whitespace, return empty string
+    if not model or not model.strip():
+        return ""
+
+    try:
+        print(f"calling Ollama Vision to unload model {model}")
+        result = client.generate(
+            model=model,
+            keep_alive=0,
+        )
+    except Exception as e:
+        print(f"Error calling OllamaVision to unload model {model}: {e}")
+    return
+
 
  
 class OllamaVision:
@@ -740,6 +757,7 @@ class OllamaImageQuestionsVts:
                     {
                         "images": ("IMAGE",),
                         "passthrough": ("BOOLEAN", {"default": False}),
+                        "keepModelLoaded": ("BOOLEAN", {"default": True}),
                     }
 
         }
@@ -958,7 +976,8 @@ class OllamaImageQuestionsVts:
         repetition_penalty: float,
         max_new_tokens: int,
         images = [],
-        passthrough: bool = False
+        passthrough: bool = False,
+        keepModelLoaded: bool = True,
     ):
         
         print(f"len(images): {len(images)}")
@@ -986,8 +1005,20 @@ class OllamaImageQuestionsVts:
         repetition_penalty = repetition_penalty[0]
         max_new_tokens = max_new_tokens[0]
         passthrough = passthrough[0]
+        keepModelLoaded = keepModelLoaded[0]
 
         if passthrough:
+            if not keepModelLoaded:
+                # even passthrough is enabled, we still want to unload the model if keepModelLoaded is false
+                try:
+                    print(f"Unloading model from Ollama server by sending empty request with keep alive of 0")
+                    client = Client(host=url)
+                    unload_model(client, model)
+                except Exception as e:
+                    print(f"Error unloading model: {e}")
+            else:
+                print(f"keepModelLoaded enabled, not unloading model")
+            print(f"Passthrough enabled, returning empty outputs")
             return ([""], ordering_input)
 
         print(f"system: {system}")
@@ -1044,6 +1075,15 @@ request query params:
         ordering_output = ordering_input
         if len(answers) == 0:
             answers.append("")
+
+        if not keepModelLoaded:
+            try:
+                print(f"Unloading model from Ollama server by sending empty request with keep alive of 0")
+                unload_model(client, model)
+            except Exception as e:
+                print(f"Error unloading model: {e}")
+        else:
+            print(f"keepModelLoaded enabled, not unloading model")
         return (answers, ordering_output)
 
 class OllamaSettingsVts:
