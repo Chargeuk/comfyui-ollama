@@ -102,6 +102,19 @@ class OllamaApiAdapter:
         if keep_alive == 0:
             used_keep_alive = 0
 
+        options = {
+            "seed": seed,
+            "top_k": top_k,
+            "min_p": min_p,
+            "top_p": top_p,
+            "temperature": temperature,
+            "repeat_penalty": repetition_penalty,
+        }
+        if max_new_tokens == 0:
+            options["num_predict"] = -1
+        else:
+            options["num_predict"] = max_new_tokens
+
         response = self.client.generate(
             model=model,
             system=system,
@@ -109,15 +122,7 @@ class OllamaApiAdapter:
             images=images,
             keep_alive=used_keep_alive,
             format=format,
-            options={
-                "seed": seed,
-                "top_k": top_k,
-                "min_p": min_p,
-                "top_p": top_p,
-                "temperature": temperature,
-                "repeat_penalty": repetition_penalty,
-                "num_ctx": max_new_tokens,
-            }
+            options=options,
         )
         return response.get("response", "")
 
@@ -185,8 +190,10 @@ class OpenAICompatibleApiAdapter:
             ],
             "temperature": temperature,
             "top_p": top_p,
-            "max_tokens": max_new_tokens,
         }
+
+        if max_new_tokens != 0:
+            payload["max_tokens"] = max_new_tokens
 
         if format == "json":
             payload["response_format"] = {"type": "json_object"}
@@ -397,6 +404,7 @@ class OllamaVts:
                     "INT",
                     {
                         "default": 2048,
+                        "min": 0,
                     },
                 ),
                 "body_tags_multiply": (
@@ -963,6 +971,7 @@ class OllamaImageQuestionsVts:
                     "INT",
                     {
                         "default": 2048,
+                        "min": 0,
                     },
                 ),
             },

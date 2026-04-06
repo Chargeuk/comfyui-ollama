@@ -86,6 +86,8 @@ A node for asking one or more structured questions about one or more images, opt
 
 In `openai` mode, provider-specific settings that do not have a portable OpenAI-compatible equivalent are treated as no-ops instead of errors. Model unload behavior remains Ollama-only.
 
+Set `max_new_tokens` to `0` to avoid sending an explicit output cap. In Ollama mode this maps to unlimited generation, and in OpenAI-compatible mode the max-token field is omitted.
+
 ## Usage Example
 
 Consider the following workflow of vision an image, and perform additional text processing with desired LLM. In the OllamaGenerate node set the prompt as input.
