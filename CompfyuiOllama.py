@@ -1,6 +1,8 @@
 import random
 from typing import Tuple, Union, List
 import json
+from urllib import request as urllib_request
+from urllib import error as urllib_error
 
 from ollama import Client
 import numpy as np
@@ -14,21 +16,230 @@ from PIL.PngImagePlugin import PngInfo
 import os
 
 
+def openai_base_url(url: str) -> str:
+    base = url.rstrip("/")
+    if base.endswith("/v1"):
+        return base
+    return f"{base}/v1"
+
+
+def openai_extract_text(response: dict) -> str:
+    choices = response.get("choices", [])
+    if not choices:
+        return ""
+
+    message = choices[0].get("message", {})
+    content = message.get("content", "")
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text", ""))
+        return "\n".join(part for part in parts if part).strip()
+
+    return str(content).strip()
+
+
+def openai_request(method: str, url: str, api_key: str = "", payload: dict | None = None) -> dict:
+    headers = {
+        "Content-Type": "application/json",
+    }
+    if api_key and api_key.strip():
+        headers["Authorization"] = f"Bearer {api_key.strip()}"
+
+    data = None
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+
+    request = urllib_request.Request(url, data=data, headers=headers, method=method)
+
+    try:
+        with urllib_request.urlopen(request) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body else {}
+    except urllib_error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {e.code} calling {url}: {error_body}") from e
+    except urllib_error.URLError as e:
+        raise RuntimeError(f"Error calling {url}: {e.reason}") from e
+
+
+class OllamaApiAdapter:
+    def __init__(self, url: str, api_key: str = ""):
+        self.url = url
+        self.api_key = api_key
+        self.client = Client(host=url)
+
+    def list_models(self) -> List[str]:
+        models = self.client.list().get("models", [])
+        try:
+            return [model["model"] for model in models]
+        except Exception:
+            return [model["name"] for model in models]
+
+    def generate_image_question(
+        self,
+        model: str,
+        system: str,
+        prompt: str,
+        images,
+        keep_alive: int,
+        format: str,
+        seed: int,
+        top_p: float,
+        min_p: float,
+        top_k: int,
+        temperature: float,
+        repetition_penalty: float,
+        max_new_tokens: int,
+        debug: str,
+    ) -> str:
+        used_keep_alive = str(keep_alive) + "m"
+        if keep_alive == 0:
+            used_keep_alive = 0
+
+        response = self.client.generate(
+            model=model,
+            system=system,
+            prompt=prompt,
+            images=images,
+            keep_alive=used_keep_alive,
+            format=format,
+            options={
+                "seed": seed,
+                "top_k": top_k,
+                "min_p": min_p,
+                "top_p": top_p,
+                "temperature": temperature,
+                "repeat_penalty": repetition_penalty,
+                "num_ctx": max_new_tokens,
+            }
+        )
+        return response.get("response", "")
+
+    def maybe_unload_model(self, model: str, debug: str):
+        unload_model(self.client, model)
+
+
+class OpenAICompatibleApiAdapter:
+    def __init__(self, url: str, api_key: str = ""):
+        self.url = url
+        self.api_key = api_key
+        self.base_url = openai_base_url(url)
+
+    def list_models(self) -> List[str]:
+        response = openai_request(
+            "GET",
+            f"{self.base_url}/models",
+            api_key=self.api_key,
+        )
+        models = response.get("data", [])
+        return [model.get("id", "") for model in models if isinstance(model, dict) and model.get("id")]
+
+    def generate_image_question(
+        self,
+        model: str,
+        system: str,
+        prompt: str,
+        images,
+        keep_alive: int,
+        format: str,
+        seed: int,
+        top_p: float,
+        min_p: float,
+        top_k: int,
+        temperature: float,
+        repetition_penalty: float,
+        max_new_tokens: int,
+        debug: str,
+    ) -> str:
+        if debug == "enable":
+            print(
+                "[OpenAI Compatible]\n"
+                "Ignoring unsupported or provider-specific options when unavailable: "
+                "keep_alive, min_p, top_k, repetition_penalty"
+            )
+
+        user_content = [{"type": "text", "text": prompt}]
+        if images:
+            for image_binary in images:
+                encoded_image = base64.b64encode(image_binary).decode("utf-8")
+                user_content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{encoded_image}"
+                        },
+                    }
+                )
+
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_content},
+            ],
+            "temperature": temperature,
+            "top_p": top_p,
+            "max_tokens": max_new_tokens,
+        }
+
+        if format == "json":
+            payload["response_format"] = {"type": "json_object"}
+
+        try:
+            response = openai_request(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                api_key=self.api_key,
+                payload=payload,
+            )
+        except RuntimeError:
+            if payload.get("response_format"):
+                if debug == "enable":
+                    print("[OpenAI Compatible] response_format unsupported, retrying without it")
+                payload.pop("response_format", None)
+                response = openai_request(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    api_key=self.api_key,
+                    payload=payload,
+                )
+            else:
+                raise
+
+        return openai_extract_text(response)
+
+    def maybe_unload_model(self, model: str, debug: str):
+        if debug == "enable":
+            print("[OpenAI Compatible] unload not supported by the OpenAI API contract, skipping")
+
+
+def get_api_adapter(api_provider: str, url: str, api_key: str = ""):
+    if api_provider == "openai":
+        return OpenAICompatibleApiAdapter(url, api_key)
+    return OllamaApiAdapter(url, api_key)
+
+
 @PromptServer.instance.routes.post("/ollama/get_models")
 async def get_models_endpoint(request):
     data = await request.json()
 
     url = data.get("url")
-    client = Client(host=url)
-
-    models = client.list().get('models', [])
+    api_provider = data.get("api_provider", "ollama")
+    api_key = data.get("api_key", "")
 
     try:
-        models = [model['model'] for model in models]
+        adapter = get_api_adapter(api_provider, url, api_key)
+        models = adapter.list_models()
         return web.json_response(models)
     except Exception as e:
-        models = [model['name'] for model in models]
-        return web.json_response(models)
+        print(f"Error fetching models from {api_provider} endpoint {url}: {e}")
+        return web.json_response([])
     
 
 def unload_model(client, model):
@@ -698,6 +909,8 @@ class OllamaImageQuestionsVts:
         seed = random.randint(1, 2 ** 31)
         return {
             "required": {
+                "api_provider": (["ollama", "openai"], {"default": "ollama"}),
+                "api_key": ("STRING", {"default": "", "multiline": False, "password": True}),
                 "system": ("STRING", {
                     "multiline": True,
                     "default": "You are an art expert, gracefully answering questions about images. You are always direct and to the point, answering with confidence and without prefix or postfix text.",
@@ -782,15 +995,11 @@ class OllamaImageQuestionsVts:
     CATEGORY = "Ollama"
 
     @staticmethod
-    def calculate_results(client, model, system: str, query: str, split_text: str, images, input_text: str, keep_alive: int, format: str, seed: int, top_p: float, min_p: float, top_k: int, temperature: float, repetition_penalty: float, max_new_tokens: int) -> List[str]:
+    def calculate_results(adapter, model, system: str, query: str, split_text: str, images, input_text: str, keep_alive: int, format: str, seed: int, top_p: float, min_p: float, top_k: int, temperature: float, repetition_penalty: float, max_new_tokens: int, debug: str) -> List[str]:
         # if text is empty, or whitespace, return empty string
         if not query or not query.strip():
             return ""
 
-        used_keep_alive = str(keep_alive) + "m"
-        if keep_alive == 0:
-            used_keep_alive = 0
-        
         # split text by newline
         texts = query.split(split_text)
         finalResults = []
@@ -804,33 +1013,32 @@ class OllamaImageQuestionsVts:
                 text = text.strip()
                 if input_text:
                     text = f"{text}\n{input_text}"
-                print("calling Ollama Vision")
-                result = client.generate(
+                print("calling image questions provider")
+                result = adapter.generate_image_question(
                     model=model,
                     system=system,
                     prompt=text,
                     images=images,
-                    keep_alive=used_keep_alive,
+                    keep_alive=keep_alive,
                     format=format,
-                    options={
-                        "seed": seed,
-                        "top_k": top_k,
-                        "min_p": min_p,
-                        "top_p": top_p,
-                        "temperature": temperature,
-                        "repeat_penalty": repetition_penalty,
-                        "num_ctx": max_new_tokens,
-                    }
+                    seed=seed,
+                    top_k=top_k,
+                    min_p=min_p,
+                    top_p=top_p,
+                    temperature=temperature,
+                    repetition_penalty=repetition_penalty,
+                    max_new_tokens=max_new_tokens,
+                    debug=debug,
                 )
-                print("received Ollama Vision Response")
-                print(f"""[Ollama Vision]
+                print("received image questions provider response")
+                print(f"""[Image Questions]
     - query: {text}
-    - result: {result['response']}
+    - result: {result}
 
     """)
-                finalResults.append(result['response'])
+                finalResults.append(result)
             except Exception as e:
-                print(f"Error calling OllamaVision: {e}")
+                print(f"Error calling image questions provider: {e}")
         return finalResults
     
     @staticmethod
@@ -957,6 +1165,8 @@ class OllamaImageQuestionsVts:
     
     def ollama_vision(
         self,
+        api_provider: str,
+        api_key: str,
         system: str,
         split_text: str,
         questions: str,
@@ -986,6 +1196,8 @@ class OllamaImageQuestionsVts:
             images = images[0]
         else:
             images = None
+        api_provider = api_provider[0]
+        api_key = api_key[0]
         system = system[0]
         split_text = split_text[0]
         questions = questions[0]
@@ -1011,9 +1223,9 @@ class OllamaImageQuestionsVts:
             if not keepModelLoaded:
                 # even passthrough is enabled, we still want to unload the model if keepModelLoaded is false
                 try:
-                    print(f"Unloading model from Ollama server by sending empty request with keep alive of 0")
-                    client = Client(host=url)
-                    unload_model(client, model)
+                    print(f"Attempting to unload model for provider {api_provider}")
+                    adapter = get_api_adapter(api_provider, url, api_key)
+                    adapter.maybe_unload_model(model, debug)
                 except Exception as e:
                     print(f"Error unloading model: {e}")
             else:
@@ -1028,11 +1240,12 @@ class OllamaImageQuestionsVts:
 
         images_binary = OllamaImageQuestionsVts.get_binary_images(images)
 
-        client = Client(host=url)
+        adapter = get_api_adapter(api_provider, url, api_key)
         if debug == "enable":
-            print(f"""[Ollama Vision]
+            print(f"""[Image Questions]
 request query params:
 
+- api_provider: {api_provider}
 - url: {url}
 - model: {model}
 
@@ -1061,7 +1274,8 @@ request query params:
             if used_input_text:
                 print(f"used_input_text: {used_input_text}")
                 used_input_text = used_input_text.strip()
-                used_input_text = f"```{used_input_text}```"
+                if triple_quote_input_text == "enable":
+                    used_input_text = f"```{used_input_text}```"
 
             if image_binary:
                 image_binary = [image_binary]
@@ -1069,7 +1283,7 @@ request query params:
             used_keep_alive = mid_question_alive
             if i == max_length - 1:
                 used_keep_alive = keep_alive
-            answer = OllamaImageQuestionsVts.calculate_results(client, model, system, questions, split_text, image_binary, used_input_text, used_keep_alive, format, seed, top_p, min_p, top_k, temperature, repetition_penalty, max_new_tokens)
+            answer = OllamaImageQuestionsVts.calculate_results(adapter, model, system, questions, split_text, image_binary, used_input_text, used_keep_alive, format, seed, top_p, min_p, top_k, temperature, repetition_penalty, max_new_tokens, debug)
             answers.append(OllamaImageQuestionsVts.to_text(answer))
 
         ordering_output = ordering_input
@@ -1078,8 +1292,8 @@ request query params:
 
         if not keepModelLoaded:
             try:
-                print(f"Unloading model from Ollama server by sending empty request with keep alive of 0")
-                unload_model(client, model)
+                print(f"Attempting to unload model for provider {api_provider}")
+                adapter.maybe_unload_model(model, debug)
             except Exception as e:
                 print(f"Error unloading model: {e}")
         else:

@@ -80,6 +80,12 @@ More [params info](https://github.com/ollama/ollama/blob/main/docs/modelfile.md#
 
 ![pic](.meta/generate-advance.png)
 
+### Ollama Image Questions Vts
+
+A node for asking one or more structured questions about one or more images, optionally alongside text input. It now supports both `ollama` and `openai` provider modes, using the same `url` field for the selected API style.
+
+In `openai` mode, provider-specific settings that do not have a portable OpenAI-compatible equivalent are treated as no-ops instead of errors. Model unload behavior remains Ollama-only.
+
 ## Usage Example
 
 Consider the following workflow of vision an image, and perform additional text processing with desired LLM. In the OllamaGenerate node set the prompt as input.

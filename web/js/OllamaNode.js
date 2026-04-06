@@ -11,9 +11,11 @@ app.registerExtension({
         }
 
         const urlWidget = this.widgets.find((w) => w.name === "url");
+        const apiProviderWidget = this.widgets.find((w) => w.name === "api_provider");
+        const apiKeyWidget = this.widgets.find((w) => w.name === "api_key");
         const modelWidget = this.widgets.find((w) => w.name === "model");
 
-        const fetchModels = async (url) => {
+        const fetchModels = async (url, apiProvider, apiKey) => {
           try {
             const response = await fetch("/ollama/get_models", {
               method: "POST",
@@ -22,6 +24,8 @@ app.registerExtension({
               },
               body: JSON.stringify({
                 url,
+                api_provider: apiProvider,
+                api_key: apiKey,
               }),
             });
 
@@ -41,11 +45,13 @@ app.registerExtension({
 
         const updateModels = async () => {
           const url = urlWidget.value;
+          const apiProvider = apiProviderWidget?.value ?? "ollama";
+          const apiKey = apiKeyWidget?.value ?? "";
           const prevValue = modelWidget.value
           modelWidget.value = ''
           modelWidget.options.values = []
 
-          const models = await fetchModels(url);
+          const models = await fetchModels(url, apiProvider, apiKey);
 
           // Update modelWidget options and value
           modelWidget.options.values = models;
@@ -61,6 +67,12 @@ app.registerExtension({
         };
 
         urlWidget.callback = updateModels;
+        if (apiProviderWidget) {
+          apiProviderWidget.callback = updateModels;
+        }
+        if (apiKeyWidget) {
+          apiKeyWidget.callback = updateModels;
+        }
 
         const dummy = async () => {
           // calling async method will update the widgets with actual value from the browser and not the default from Node definition.
