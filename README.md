@@ -88,6 +88,8 @@ In `openai` mode, provider-specific settings that do not have a portable OpenAI-
 
 Set `max_new_tokens` to `0` to avoid sending an explicit output cap. In Ollama mode this maps to unlimited generation, and in OpenAI-compatible mode the max-token field is omitted.
 
+Enable `hide_thinking` to strip `<think>...</think>` blocks from the returned text as a best-effort cleanup step.
+
 ## Usage Example
 
 Consider the following workflow of vision an image, and perform additional text processing with desired LLM. In the OllamaGenerate node set the prompt as input.

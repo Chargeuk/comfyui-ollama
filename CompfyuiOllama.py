@@ -1,6 +1,7 @@
 import random
 from typing import Tuple, Union, List
 import json
+import re
 from urllib import request as urllib_request
 from urllib import error as urllib_error
 
@@ -66,6 +67,14 @@ def openai_request(method: str, url: str, api_key: str = "", payload: dict | Non
         raise RuntimeError(f"HTTP {e.code} calling {url}: {error_body}") from e
     except urllib_error.URLError as e:
         raise RuntimeError(f"Error calling {url}: {e.reason}") from e
+
+
+def strip_thinking_blocks(text: str) -> str:
+    if not isinstance(text, str) or not text:
+        return text
+
+    cleaned = re.sub(r"<think\b[^>]*>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    return cleaned.strip()
 
 
 class OllamaApiAdapter:
@@ -928,6 +937,7 @@ class OllamaImageQuestionsVts:
                 "questions": ("STRING", {"default": "", "multiline": True}),
                 "input_text": ("STRING", {"default": "", "multiline": True}),
                 "ordering_input": ("STRING", {"default": "", "multiline": False}),
+                "hide_thinking": ("BOOLEAN", {"default": False}),
                 "triple_quote_input_text": (["enable", "disable"],),
                 "debug": (["enable", "disable"],),
                 "url": ("STRING", {
@@ -1004,7 +1014,7 @@ class OllamaImageQuestionsVts:
     CATEGORY = "Ollama"
 
     @staticmethod
-    def calculate_results(adapter, model, system: str, query: str, split_text: str, images, input_text: str, keep_alive: int, format: str, seed: int, top_p: float, min_p: float, top_k: int, temperature: float, repetition_penalty: float, max_new_tokens: int, debug: str) -> List[str]:
+    def calculate_results(adapter, model, system: str, query: str, split_text: str, images, input_text: str, keep_alive: int, format: str, seed: int, top_p: float, min_p: float, top_k: int, temperature: float, repetition_penalty: float, max_new_tokens: int, debug: str, hide_thinking: bool) -> List[str]:
         # if text is empty, or whitespace, return empty string
         if not query or not query.strip():
             return ""
@@ -1039,6 +1049,8 @@ class OllamaImageQuestionsVts:
                     max_new_tokens=max_new_tokens,
                     debug=debug,
                 )
+                if hide_thinking:
+                    result = strip_thinking_blocks(result)
                 print("received image questions provider response")
                 print(f"""[Image Questions]
     - query: {text}
@@ -1181,6 +1193,7 @@ class OllamaImageQuestionsVts:
         questions: str,
         input_text: str,
         ordering_input: str,
+        hide_thinking: bool,
         triple_quote_input_text: str,
         debug: str,                       # Assuming it's either "enable" or "disable"
         url: str,
@@ -1212,6 +1225,7 @@ class OllamaImageQuestionsVts:
         questions = questions[0]
         # input_text = input_text[0] - don't do input_text as it is valid for it to be a list
         ordering_input = ordering_input[0]
+        hide_thinking = hide_thinking[0]
         triple_quote_input_text = triple_quote_input_text[0]
         debug = debug[0]
         url = url[0]
@@ -1292,7 +1306,7 @@ request query params:
             used_keep_alive = mid_question_alive
             if i == max_length - 1:
                 used_keep_alive = keep_alive
-            answer = OllamaImageQuestionsVts.calculate_results(adapter, model, system, questions, split_text, image_binary, used_input_text, used_keep_alive, format, seed, top_p, min_p, top_k, temperature, repetition_penalty, max_new_tokens, debug)
+            answer = OllamaImageQuestionsVts.calculate_results(adapter, model, system, questions, split_text, image_binary, used_input_text, used_keep_alive, format, seed, top_p, min_p, top_k, temperature, repetition_penalty, max_new_tokens, debug, hide_thinking)
             answers.append(OllamaImageQuestionsVts.to_text(answer))
 
         ordering_output = ordering_input
