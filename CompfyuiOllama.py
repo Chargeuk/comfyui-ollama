@@ -24,14 +24,20 @@ def openai_base_url(url: str) -> str:
     return f"{base}/v1"
 
 
-def openai_extract_text(response: dict) -> str:
-    choices = response.get("choices", [])
-    if not choices:
-        return ""
+def lmstudio_root_url(url: str) -> str:
+    base = url.rstrip("/")
+    if base.endswith("/api/v1"):
+        return base[:-7]
+    if base.endswith("/v1"):
+        return base[:-3]
+    return base
 
-    message = choices[0].get("message", {})
-    content = message.get("content", "")
 
+def lmstudio_native_base_url(url: str) -> str:
+    return f"{lmstudio_root_url(url)}/api/v1"
+
+
+def extract_message_text(content) -> str:
     if isinstance(content, str):
         return content
 
@@ -43,6 +49,31 @@ def openai_extract_text(response: dict) -> str:
         return "\n".join(part for part in parts if part).strip()
 
     return str(content).strip()
+
+
+def openai_extract_text(response: dict) -> str:
+    choices = response.get("choices", [])
+    if not choices:
+        return ""
+
+    message = choices[0].get("message", {})
+    return extract_message_text(message.get("content", ""))
+
+
+def lmstudio_extract_text(response: dict) -> str:
+    choices = response.get("choices", [])
+    if not choices:
+        return ""
+
+    message = choices[0].get("message", {})
+    reasoning_content = extract_message_text(message.get("reasoning_content", ""))
+    content = extract_message_text(message.get("content", ""))
+
+    if reasoning_content and content:
+        return f"<think>{reasoning_content}</think>\n\n{content}"
+    if reasoning_content:
+        return f"<think>{reasoning_content}</think>"
+    return content
 
 
 def openai_request(method: str, url: str, api_key: str = "", payload: dict | None = None) -> dict:
@@ -163,7 +194,7 @@ class OpenAICompatibleApiAdapter:
         models = response.get("data", [])
         return [model.get("id", "") for model in models if isinstance(model, dict) and model.get("id")]
 
-    def generate_image_question(
+    def build_payload(
         self,
         model: str,
         system: str,
@@ -179,14 +210,7 @@ class OpenAICompatibleApiAdapter:
         repetition_penalty: float,
         max_new_tokens: int,
         debug: str,
-    ) -> str:
-        if debug == "enable":
-            print(
-                "[OpenAI Compatible]\n"
-                "Ignoring unsupported or provider-specific options when unavailable: "
-                "keep_alive, min_p, top_k, repetition_penalty"
-            )
-
+    ) -> dict:
         user_content = [{"type": "text", "text": prompt}]
         if images:
             for image_binary in images:
@@ -216,6 +240,55 @@ class OpenAICompatibleApiAdapter:
         if format == "json":
             payload["response_format"] = {"type": "json_object"}
 
+        return payload
+
+    def extract_response_text(self, response: dict) -> str:
+        return openai_extract_text(response)
+
+    def should_explicitly_unload(self, keep_alive: int, keep_model_loaded: bool) -> bool:
+        return not keep_model_loaded
+
+    def generate_image_question(
+        self,
+        model: str,
+        system: str,
+        prompt: str,
+        images,
+        keep_alive: int,
+        format: str,
+        seed: int,
+        top_p: float,
+        min_p: float,
+        top_k: int,
+        temperature: float,
+        repetition_penalty: float,
+        max_new_tokens: int,
+        debug: str,
+    ) -> str:
+        if debug == "enable":
+            print(
+                "[OpenAI Compatible]\n"
+                "Ignoring unsupported or provider-specific options when unavailable: "
+                "keep_alive, min_p, top_k, repetition_penalty"
+            )
+
+        payload = self.build_payload(
+            model=model,
+            system=system,
+            prompt=prompt,
+            images=images,
+            keep_alive=keep_alive,
+            format=format,
+            seed=seed,
+            top_p=top_p,
+            min_p=min_p,
+            top_k=top_k,
+            temperature=temperature,
+            repetition_penalty=repetition_penalty,
+            max_new_tokens=max_new_tokens,
+            debug=debug,
+        )
+
         try:
             response = openai_request(
                 "POST",
@@ -237,14 +310,130 @@ class OpenAICompatibleApiAdapter:
             else:
                 raise
 
-        return openai_extract_text(response)
+        return self.extract_response_text(response)
 
     def maybe_unload_model(self, model: str, debug: str):
         if debug == "enable":
             print("[OpenAI Compatible] unload not supported by the OpenAI API contract, skipping")
 
 
+class LMStudioApiAdapter(OpenAICompatibleApiAdapter):
+    def __init__(self, url: str, api_key: str = ""):
+        super().__init__(lmstudio_root_url(url), api_key)
+        self.native_base_url = lmstudio_native_base_url(url)
+
+    def list_models(self) -> List[str]:
+        response = openai_request(
+            "GET",
+            f"{self.native_base_url}/models",
+            api_key=self.api_key,
+        )
+        models = response.get("models") or response.get("data") or []
+        return [
+            model.get("key") or model.get("modelKey") or model.get("id", "")
+            for model in models
+            if isinstance(model, dict)
+            and (model.get("type") in (None, "llm", "model") or model.get("object") == "model")
+            and (model.get("key") or model.get("modelKey") or model.get("id"))
+        ]
+
+    def build_payload(
+        self,
+        model: str,
+        system: str,
+        prompt: str,
+        images,
+        keep_alive: int,
+        format: str,
+        seed: int,
+        top_p: float,
+        min_p: float,
+        top_k: int,
+        temperature: float,
+        repetition_penalty: float,
+        max_new_tokens: int,
+        debug: str,
+    ) -> dict:
+        payload = super().build_payload(
+            model=model,
+            system=system,
+            prompt=prompt,
+            images=images,
+            keep_alive=keep_alive,
+            format=format,
+            seed=seed,
+            top_p=top_p,
+            min_p=min_p,
+            top_k=top_k,
+            temperature=temperature,
+            repetition_penalty=repetition_penalty,
+            max_new_tokens=max_new_tokens,
+            debug=debug,
+        )
+
+        # LM Studio supports OpenAI-compatible inference parameters, including top_k,
+        # repeat_penalty, seed, and TTL.
+        payload["top_k"] = top_k
+        payload["repeat_penalty"] = repetition_penalty
+        payload["seed"] = seed
+
+        if keep_alive > 0:
+            payload["ttl"] = keep_alive * 60
+
+        return payload
+
+    def extract_response_text(self, response: dict) -> str:
+        return lmstudio_extract_text(response)
+
+    def should_explicitly_unload(self, keep_alive: int, keep_model_loaded: bool) -> bool:
+        return keep_alive == 0 or not keep_model_loaded
+
+    def maybe_unload_model(self, model: str, debug: str):
+        response = openai_request(
+            "GET",
+            f"{self.native_base_url}/models",
+            api_key=self.api_key,
+        )
+        models = response.get("models") or response.get("data") or []
+
+        selected_model = None
+        for model_entry in models:
+            model_key = model_entry.get("key") or model_entry.get("modelKey") or model_entry.get("id")
+            if isinstance(model_entry, dict) and model_key == model:
+                selected_model = model_entry
+                break
+
+        if not selected_model:
+            if debug == "enable":
+                print(f"[LM Studio] could not find model metadata for {model}, skipping unload")
+            return
+
+        loaded_instances = selected_model.get("loaded_instances") or selected_model.get("loadedInstances") or []
+        if not loaded_instances:
+            if debug == "enable":
+                print(f"[LM Studio] model {model} is not currently loaded, skipping unload")
+            return
+
+        instance_id = loaded_instances[0].get("id") or loaded_instances[0].get("instance_id") or loaded_instances[0].get("instanceId")
+        if not instance_id:
+            if debug == "enable":
+                print(f"[LM Studio] no instance id found for model {model}, skipping unload")
+            return
+
+        if debug == "enable":
+            print(f"[LM Studio] unloading instance {instance_id}")
+
+        openai_request(
+            "POST",
+            f"{self.native_base_url}/models/unload",
+            api_key=self.api_key,
+            payload={"instance_id": instance_id},
+        )
+
+
 def get_api_adapter(api_provider: str, url: str, api_key: str = ""):
+    if api_provider == "lmstudio":
+        return LMStudioApiAdapter(url, api_key)
     if api_provider == "openai":
         return OpenAICompatibleApiAdapter(url, api_key)
     return OllamaApiAdapter(url, api_key)
@@ -935,7 +1124,7 @@ class OllamaImageQuestionsVts:
         seed = random.randint(1, 2 ** 31)
         return {
             "required": {
-                "api_provider": (["ollama", "openai"], {"default": "ollama"}),
+                "api_provider": (["ollama", "openai", "lmstudio"], {"default": "ollama"}),
                 "api_key": ("STRING", {"default": "", "multiline": False, "password": True}),
                 "system": ("STRING", {
                     "multiline": True,
@@ -1252,11 +1441,11 @@ class OllamaImageQuestionsVts:
         keepModelLoaded = keepModelLoaded[0]
 
         if passthrough:
-            if not keepModelLoaded:
-                # even passthrough is enabled, we still want to unload the model if keepModelLoaded is false
+            adapter = get_api_adapter(api_provider, url, api_key)
+            if adapter.should_explicitly_unload(keep_alive, keepModelLoaded):
+                # Some providers can unload even when no request is made in this pass.
                 try:
                     print(f"Attempting to unload model for provider {api_provider}")
-                    adapter = get_api_adapter(api_provider, url, api_key)
                     adapter.maybe_unload_model(model, debug)
                 except Exception as e:
                     print(f"Error unloading model: {e}")
@@ -1273,6 +1462,7 @@ class OllamaImageQuestionsVts:
         images_binary = OllamaImageQuestionsVts.get_binary_images(images)
 
         adapter = get_api_adapter(api_provider, url, api_key)
+        should_explicitly_unload = adapter.should_explicitly_unload(keep_alive, keepModelLoaded)
         if debug == "enable":
             print(f"""[Image Questions]
 request query params:
@@ -1322,7 +1512,7 @@ request query params:
         if len(answers) == 0:
             answers.append("")
 
-        if not keepModelLoaded:
+        if should_explicitly_unload:
             try:
                 print(f"Attempting to unload model for provider {api_provider}")
                 adapter.maybe_unload_model(model, debug)

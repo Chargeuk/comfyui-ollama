@@ -82,13 +82,15 @@ More [params info](https://github.com/ollama/ollama/blob/main/docs/modelfile.md#
 
 ### Ollama Image Questions Vts
 
-A node for asking one or more structured questions about one or more images, optionally alongside text input. It now supports both `ollama` and `openai` provider modes, using the same `url` field for the selected API style.
+A node for asking one or more structured questions about one or more images, optionally alongside text input. It now supports `ollama`, generic `openai`, and `lmstudio` provider modes, using the same `url` field for the selected API style.
 
-In `openai` mode, provider-specific settings that do not have a portable OpenAI-compatible equivalent are treated as no-ops instead of errors. Model unload behavior remains Ollama-only.
+In generic `openai` mode, provider-specific settings that do not have a portable OpenAI-compatible equivalent are treated as no-ops instead of errors. In `lmstudio` mode, the node uses LM Studio-specific model listing and optional unload behavior in addition to OpenAI-compatible inference requests.
 
 Set `max_new_tokens` to `0` to avoid sending an explicit output cap. In Ollama mode this maps to unlimited generation, and in OpenAI-compatible mode the max-token field is omitted.
 
 Enable `hide_thinking` to strip `<think>...</think>` blocks from the returned text as a best-effort cleanup step.
+
+In `lmstudio` mode, positive `keep_alive` values are translated to LM Studio TTL behavior, and `keepModelLoaded` can trigger a native unload request when supported by the server.
 
 ## Usage Example
 
