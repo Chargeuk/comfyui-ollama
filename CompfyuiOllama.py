@@ -73,8 +73,17 @@ def strip_thinking_blocks(text: str) -> str:
     if not isinstance(text, str) or not text:
         return text
 
-    cleaned = re.sub(r"<think\b[^>]*>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
-    return cleaned.strip()
+    cleaned = text
+    leading_think_pattern = re.compile(r"^\s*<think\b[^>]*>.*?</think>\s*", flags=re.IGNORECASE | re.DOTALL)
+
+    while True:
+        updated = leading_think_pattern.sub("", cleaned, count=1)
+        if updated == cleaned:
+            break
+        cleaned = updated
+
+    cleaned = cleaned.strip()
+    return cleaned if cleaned else text.strip()
 
 
 class OllamaApiAdapter:
