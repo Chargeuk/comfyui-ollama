@@ -1,3 +1,50 @@
+23-10-2025:
+
+- Fixed Ollama cloud model support with new OllamaChat node
+- Cloud models authenticate via SSH keys (no API key required)
+- Uses `ollama.chat()` method for cloud compatibility
+
+04-08-2025:
+
+- Added `think` option and separate `thinking` output on the Ollama Generate node. This replaces the previous `filter_thinking` workaround.
+- Added tooltips and node descriptions.
+- Added example workflows. See ComfyUI's template browser in the workflow menu.
+- Added a message that appears when the list of models fails to load. User can click the "Reconnect" button on the connectivity node to reload list.
+- Deprecate V1 nodes, please replace them in your workflows.
+
+10-07-2025:
+
+Adding user seed to OllamaVision request.
+
+10-06-2025:
+
+Increased temperature limits in OptionsV2.
+
+26-05-2025:
+
+Added toggle to strip thinking from response
+
+22-04-2025:
+
+Fix v2 settings num ctx limit.
+Update ollama python 0.4.8.
+
+10-01-2025:
+
+V2 release.
+
+Added nodes:
+
+- OllamaGenerateV2
+
+- OllamaConnectivityV2
+
+- OllamaOptionsV2
+
+09-01-2025
+
+Update python ollama client 0.4.2 -> 0.4.5
+
 04-12-2024:
 
 Fix image base64 to binary issue.

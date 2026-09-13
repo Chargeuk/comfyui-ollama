@@ -8,13 +8,18 @@ To use this properly, you would need a running Ollama server reachable from the 
 
 <a href="https://www.buymeacoffee.com/stavsapq" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="40" width="174"></a>
 
+![pic](.meta/basic-example.jpg)
+
 ## Installation
 
-Install ollama server on the desired host
+### 1. Install ollama server on the desired host
 
 <a href="https://ollama.com/" target="_blank">
-  <img src="https://img.shields.io/badge/v0.4.2-green.svg?style=for-the-badge&labelColor=gray&label=Ollama&color=blue" alt=""/>
+  <img src="https://img.shields.io/badge/v0.5.7-green.svg?style=for-the-badge&labelColor=gray&label=Ollama&color=blue" alt=""/>
 </a>
+
+<details>
+<summary><b>Instructions</b></summary>
 
 <a href="https://ollama.com/download/Ollama-darwin.zip" target="_blank">Download for macOS</a>
 
@@ -22,7 +27,7 @@ Install ollama server on the desired host
 
 Install on Linux
 
-```shell 
+```shell
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
@@ -40,45 +45,108 @@ NVIDIA GPU
 docker run -d -p 11434:11434 --gpus=all -v ollama:/root/.ollama --name ollama  ollama/ollama
 ```
 
-Use the [compfyui manager](https://github.com/ltdrdata/ComfyUI-Manager) "Custom Node Manager":
+</details>
 
-![pic](.meta/InstallViaManager.png)
+### 2. Install the custom nodes
 
-Search `ollama` and select the one by `stavsap`
+Use ComfyUI's built-in extension manager to install the nodes. Search for `comfyui-ollama` by `Stav Sapir`.
+
+**Or**
+
+If you prefer [ComfyUI-Manager](https://github.com/ltdrdata/ComfyUI-Manager), search for `ollama` and select the one by `stavsap`
 
 ![pic](.meta/manager-install.png)
 
 **Or**
 
-1. git clone into the ```custom_nodes``` folder inside your ComfyUI installation or download as zip and unzip the contents to ```custom_nodes/compfyui-ollama```.
+1. git clone into the `custom_nodes` folder inside your ComfyUI installation or download as zip and unzip the contents to `custom_nodes/compfyui-ollama`.
 2. `pip install -r requirements.txt`
 3. Start/restart ComfyUI
 
-### Nodes
+### Configuration (Ollama Key)
 
-### OllamaVision
+If you are using **Ollama Cloud templates** that require authentication, you must provide your Ollama public key.
 
-A node that gives an ability to query input images. 
+You can do this automatically with the CLI:
+```shell
+ollama signin
+```
 
-![pic](.meta/OllamaVision.png)
+Or by manually adding your public key at [ollama.com/settings/key](https://ollama.com/settings/keys).
 
-A model name should be model with Vision abilities, for example: https://ollama.com/library/llava.
+Your public key is located at:
+| OS | Path to id_ed25519.pub |
+|----|-----------------------|
+| macOS | ~/.ollama/id_ed25519.pub |
+| Linux | /usr/share/ollama/.ollama/id_ed25519.pub |
+| Windows | C:\Users\<username>\.ollama\id_ed25519.pub |
+
+See Ollama's [FAQ](https://docs.ollama.com/faq#where-can-i-find-my-ollama-public-key%3F) for more details.
+
+## Nodes
 
 ### OllamaGenerate
 
-A node that gives an ability to query an LLM via given prompt. 
+A node that provides ability to set the system prompt and the prompt.
 
-![pic](.meta/OllamaGenerate.png)
+Ability to save context locally in the node `enable/disable`
 
-### OllamaGenerateAdvance
+Inputs:
 
-A node that gives an ability to query an LLM via given prompt with fine tune parameters and an ability to preserve context for generate chaining. 
+-   **OllamaConnectivity** (optional)
+-   **OllamaOptions** (optional)
+-   **images** (optional)
+-   **context** (optional), a context from other OllamaConnectivity
+-   **meta** (optional), passing metadata of the OllamaConnectivity and OllamaOptions from other OllamaGenerate node.
 
-Check [ollama api docs](https://github.com/ollama/ollama/blob/main/docs/api.md#generate-a-completion) to get info on the parameters.
+**Notes:**
 
-More [params info](https://github.com/ollama/ollama/blob/main/docs/modelfile.md#parameter)
+-   For this node to be operational, **OllamaConnectivity** or **meta** must be inputted!.
+-   If **images** are inputted and a chain of **meta** usage is made, all the **images** need to be passed as well to the next **OllamaConnectivity** nodes.
 
-![pic](.meta/generate-advance.png)
+## OllamaChat
+
+A node for **conversational interaction** using the dedicated Ollama chat endpoint (`ollama.chat`). It manages the full conversation history natively and allows for chained sequences of chat nodes.
+
+-   **Functionality:** Unlike `OllamaGenerate`, this node is designed specifically for multi-turn conversations and cloud models with your Ollama public key (see the Configuration section).
+-   **Key Features:**
+    -   Conversation history is handled natively within the node instance.
+    -   Dedicated history outputs for **chaining multiple chat nodes**.
+    -   Option to **reset** the current conversation history on demand.
+
+Inputs:
+
+-   **OllamaConnectivity** (optional)
+-   **OllamaOptions** (optional)
+-   **images** (optional)
+-   **meta** (optional), passing metadata of the OllamaConnectivity and
+    OllamaOptions from other OllamaChat node.
+-   **history** (optional), passing history ID from other OllamaChat node.
+
+Outputs:
+
+-   **result**: The generated text
+-   **thinking**: The thinking text
+-   **meta**: The metadata to pass to the next OllamaChat node
+-   **history**: The history ID to pass to the next OllamaChat node
+
+### OllamaConnectivity
+
+A node responsible only fot the connectivity to the ollama server
+
+### OllamaOptions
+
+A node for full control of the ollama api options.
+
+For an option to take effect, each option have also `enable/disable`, enabled options are passed to api call to ollama server.
+
+Ollama API options can be found in [this table](https://github.com/ollama/ollama/blob/main/docs/modelfile.md#valid-parameters-and-values).
+
+**Note**: There is an additional option `debug` that enables debug print in the cli, its not part of ollama api.
+
+### Deprecated nodes
+
+Old V1 nodes are still available, please replace them with the above ones. Here's the [documentation of V1](V1_nodes.md) nodes.
 
 ### Ollama Image Questions Vts
 
@@ -94,8 +162,6 @@ In `lmstudio` mode, positive `keep_alive` values are translated to LM Studio TTL
 
 ## Usage Example
 
-Consider the following workflow of vision an image, and perform additional text processing with desired LLM. In the OllamaGenerate node set the prompt as input.
-
-![pic](.meta/CombinedUsage1.png)
+Please see the `example_workflows` folder or use ComfyUI's template browser.
 
 The custom Text Nodes in the examples can be found here: https://github.com/pythongosssss/ComfyUI-Custom-Scripts
